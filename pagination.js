@@ -1,4 +1,5 @@
-module.exports.approvedProductList = async(req,res) => {
+module.exports.pendingProductList = async(req,res) => {
+    
     try {
 
         const { page = 1, limit = 10, search = ""} = req.query;
@@ -13,10 +14,13 @@ module.exports.approvedProductList = async(req,res) => {
             ];
         }
 
-        const approvedProduct  = await inventoryModel.aggregate([
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        const pendingProduct  = await inventoryModel.aggregate([
             {
                 $match: {
-                    publishStatus: "Published"
+                    publishStatus: "Under Review",
+                    isdeleted: false
                 }
             },
             {
@@ -110,40 +114,24 @@ module.exports.approvedProductList = async(req,res) => {
                 $sort: { createdAt: -1 },
             },
             {
-                $facet: {
-                    data: [
-                        { $skip: (parseInt(page, 10) - 1) * parseInt(limit, 10) },
-                        { $limit: parseInt(limit, 10) },
-                    ],
-                    metadata: [
-                        { $count: "total" },
-                    ],
-                },
+                $skip: skip
             },
             {
-                $addFields: {
-                    pagination: {
-                        total: { $arrayElemAt: ["$metadata.total", 0] },
-                        page: parseInt(page, 10),
-                        limit: parseInt(limit, 10),
-                        totalPages: {
-                            $ceil: {
-                                $divide: [{ $arrayElemAt: ["$metadata.total", 0] }, parseInt(limit, 10)]
-                            }
-                        }
-                    }
-                }
+                $limit: parseInt(limit)
             },
-            {
-                $project: {
-                    metadata: 0
-                }
-            }
         ]);
+
+        const totalCount = await inventoryModel.countDocuments({ publishStatus: "Under Review", isdeleted: false });
 
         return res.send({
             code: 200,
-            data: approvedProduct,
+            data: pendingProduct,
+            pagination: {
+                total: totalCount,
+                page: parseInt(page),
+                limit: parseInt(limit),
+                totalPages: Math.ceil(totalCount / limit),
+            },
         })
     } catch (error) {
         console.log("Error fetching order details:", error);
